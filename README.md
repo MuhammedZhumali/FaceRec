@@ -97,5 +97,3 @@ Detect faces in each frame.
 Check liveness (real vs. spoof).
 
 Identify recognized faces and display names in the video window.
-
-## 📁 Project Structure
