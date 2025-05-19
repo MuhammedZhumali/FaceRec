@@ -39,7 +39,7 @@
 - `numpy`, `dlib`, `tensorflow`, `keras`
 
 ## 🚀 Usage
-# 1. Encode known faces:
+### 1. Encode known faces:
 Place labeled face images into a dataset folder:
 dataset/
 ├── Alice/
@@ -52,7 +52,7 @@ python encode_faces.py
 
 This will generate encodings.pickle.
 
-# 2. Start recognition:
+### 2. Start recognition:
 python face_recognition.py
 python Main.py(system with ultrasonic sensor)
 
