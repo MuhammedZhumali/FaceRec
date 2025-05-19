@@ -1,99 +1,59 @@
 # FaceRec
 
-A Python‐based face recognition system with integrated liveness detection. FaceRec lets you:
+**FaceRec** is a Python-based facial recognition system enhanced with liveness detection. It enables secure authentication by identifying faces from a known database and ensuring the subject is a real, live person.
 
-- **Detect** faces in images and video streams using OpenCV’s DNN face detector.
-- **Encode** known faces into 128-dimensional embeddings with the `face_recognition` library.
-- **Recognize** those faces in real time from your webcam or video feed.
-- **Prevent spoofing** by running a pre-trained Keras liveness model on each detected face.
+## 📁 Project Structure
 
----
+├── Main.py # Main script to run face recognition
+├── encode_faces.py # Script to generate face encodings
+├── encodings.pickle # Saved face embeddings
+├── face_recognition # Binary/script for face recognition execution
+├── liveness_model_softmax.h5 # Trained Keras model for liveness detection
+├── balance.sh # Shell script (possibly for setup or balance config)
+├── bin/, share/ # Possibly environment or system folders
+├── pyvenv.cfg # Python virtual environment configuration
+└── README.md # Project description and instructions
 
-## 📋 Features
 
-- **Face Detection**  
-  Uses OpenCV’s Caffe-based detector (`deploy.prototxt` + `res10_300x300_ssd_iter_140000.caffemodel`).
+## 🧠 Features
 
-- **Face Encoding**  
-  Scans a folder of labeled face images and builds `encodings.pickle` for later recognition (`encode_faces.py`).
+- Face detection using Haar cascades or CNNs (based on implementation).
+- Face recognition using embeddings and cosine distance comparison.
+- Liveness detection using a trained softmax-based deep learning model.
+- Encodings stored as a `.pickle` file for fast access.
+- Simple command-line execution.
 
-- **Real-Time Recognition**  
-  Matches live webcam faces against your known encodings.
+## ⚙️ Requirements
 
-- **Liveness Detection**  
-  Runs each detected face through `liveness.h5` to reject photos/videos.
+- Python 3.11+
+- OpenCV
+- `face_recognition`
+- `numpy`, `dlib`, `tensorflow`, `keras`
 
-- **Utility Scripts**  
-  - `balance.sh` — helper script (e.g., to rebalance datasets).  
-  - `encode_faces.py` — batch-encode your “known” faces.
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Python 3.8+**  
-- **dlib** (for `face_recognition`)  
-- **face_recognition**  
-- **OpenCV-Python**  
-- **TensorFlow / Keras**  
-- **imutils**, **numpy**, **scikit-learn**
-
-### Installation
-
-1. **Clone the repo**  
-   ```bash
-   git clone https://github.com/MuhammedZhumali/FaceRec.git
-   cd FaceRec
-
-2. **Create & activate a virtual environment**  
-    ```python3 -m venv venv
-    source venv/bin/activate      # Linux/macOS
-    # venv\Scripts\activate       # Windows PowerShell
-
-3. **Install dependencies**
-    ```pip install --upgrade pip
-    pip install face_recognition opencv-python tensorflow imutils scikit-learn
-
-## 🗄️ Prepare Your Dataset
-Place your labeled face images in a folder structure like:
+## 🚀 Usage
+# 1. Encode known faces:
+Place labeled face images into a dataset folder:
 dataset/
-├── alice/
-│   ├── alice1.jpg
-│   └── alice2.jpg
-└── bob/
-    ├── bob1.jpg
-    └── bob2.jpg
+├── Alice/
+│   └── alice1.jpg
+├── Bob/
+│   └── bob1.jpg
+
+Then run:
+python encode_faces.py
+
+This will generate encodings.pickle.
+
+# 2. Start recognition:
+python face_recognition.py
+python Main.py(system with ultrasonic sensor)
+
+## 🧪 Liveness Detection
+The model liveness_model_softmax.h5 is a trained binary classifier that detects real vs. spoofed (photo/video) faces. It works in conjunction with the real-time recognition process to prevent spoofing.
 
 
-## 🔧 Encode Known Faces
-Run the encoding script to generate encodings.pickle:
-    ```python encode_faces.py \
-    --dataset dataset \
-    --encodings encodings.pickle \
-    --prototxt deploy.prototxt \
-    --model res10_300x300_ssd_iter_140000.caffemodel
---dataset : Path to your folder of face images
 
---encodings: Path where to store the serialized embeddings
+## 🛠 Dev Notes
+The folders bin/ and share/man/ might come from a Linux package or installed CLI tool.
+face_recognition may be a binary or renamed script.
 
---prototxt : Face detector model definition
-
---model : Pre-trained face detector weights
-
-## 🎥 Run Real-Time Recognition
-    ```python face_recognition/recognize.py \
-    --encodings encodings.pickle \
-    --prototxt deploy.prototxt \
-    --model res10_300x300_ssd_iter_140000.caffemodel \
-    --liveness liveness.h5
-This will:
-
-Open your default webcam.
-
-Detect faces in each frame.
-
-Check liveness (real vs. spoof).
-
-Identify recognized faces and display names in the video window.
