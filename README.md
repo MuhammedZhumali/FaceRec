@@ -5,13 +5,21 @@
 ## 📁 Project Structure
 
 ├── Main.py # Main script to run face recognition
+
 ├── encode_faces.py # Script to generate face encodings
+
 ├── encodings.pickle # Saved face embeddings
+
 ├── face_recognition # Binary/script for face recognition execution
+
 ├── liveness_model_softmax.h5 # Trained Keras model for liveness detection
+
 ├── balance.sh # Shell script (possibly for setup or balance config)
+
 ├── bin/, share/ # Possibly environment or system folders
+
 ├── pyvenv.cfg # Python virtual environment configuration
+
 └── README.md # Project description and instructions
 
 
