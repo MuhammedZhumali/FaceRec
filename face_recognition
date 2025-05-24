@@ -10,6 +10,7 @@ import RPi.GPIO as GPIO
 import time
 import tkinter as tk
 from tkinter import simpledialog
+from datetime import datetime
 
 # === GUI prompt for passport ID ===
 def ask_passport():
@@ -27,126 +28,134 @@ CAM_WIDTH     = 640
 CAM_HEIGHT    = 480
 
 SERVO_PIN     = 22
-OPEN_DC       = 15   
-CLOSED_DC     = 5   
-OPEN_DURATION = 5.0   # seconds gate stays open
+OPEN_DC       = 15
+CLOSED_DC     = 5
+OPEN_DURATION = 5.0  # seconds gate stays open
+DISPLAY_DURATION = 3.0  # duration to display matched frame
+LOG_FILE      = "entry_log.txt"
 
 GPIO.setmode(GPIO.BOARD)
 GPIO.setup(SERVO_PIN, GPIO.OUT)
 servo = GPIO.PWM(SERVO_PIN, 50)  # 50 Hz
 servo.start(CLOSED_DC)
-servo_open = False
-open_time = 0
 
 # === auto-detect camera ===
 def find_camera():
     for i in range(5):
         cap = cv2.VideoCapture(i, cv2.CAP_V4L2)
         if cap.isOpened():
-            w = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
-            h = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-            print(f"[INFO] Camera index {i} opened at {int(w)}×{int(h)}")
             return cap
         cap.release()
-    print("[ERROR] No camera found on indices 0–4")
-    sys.exit(1)
+    sys.exit("[ERROR] No camera found on indices 0–4")
 
 # === load face encodings ===
 with open(ENC_PATH, "rb") as f:
     db = pickle.load(f)
 all_encs, all_hashes, salt = db["encodings"], db["hashed_names"], db["salt"]
 
-# === prompt passport & filter encodings ===
-passport = ask_passport()
-if not passport:
-    print("[ERROR] Passport entry cancelled.")
-    sys.exit(1)
-pw = passport.strip().encode()
-h  = bcrypt.hashpw(pw, salt)
-known_encs = [e for e, hh in zip(all_encs, all_hashes) if hh == h]
-if not known_encs:
-    print(f"[ERROR] No encodings found for {passport}")
-    sys.exit(1)
-print(f"[INFO] Loaded {len(known_encs)} face encodings for {passport}")
+# === check last entry status ===
+def check_last_status(passport):
+    try:
+        with open(LOG_FILE, "r") as log:
+            lines = log.readlines()
+            for line in reversed(lines):
+                if passport in line:
+                    return "entered" in line
+    except FileNotFoundError:
+        return False
+    return False
 
 # === initialize face detector ===
-cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-)
-
-# === open camera ===
+cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 cap = find_camera()
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAM_WIDTH)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
 
-print("[INFO] Starting face recognition. Press 'q' to quit.")
-
-trackers    = []  # each: [dlib_tracker, recognized_flag]
-frame_count = 0
+print("[INFO] Starting face recognition.")
 
 try:
     while True:
-        ret, frame = cap.read()
-        if not ret:
+        passport = ask_passport()
+        if not passport:
+            print("[INFO] Passport entry cancelled. Waiting for next user.")
             continue
 
-        frame_count += 1
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        pw = passport.strip().encode()
+        h = bcrypt.hashpw(pw, salt)
+        known_encs = [e for e, hh in zip(all_encs, all_hashes) if hh == h]
 
-        # (re)detect faces every DETECT_EVERY frames or if no trackers
-        if frame_count % DETECT_EVERY == 1 or not trackers:
-            trackers.clear()
-            gray  = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = cascade.detectMultiScale(gray, 1.1, 5, minSize=(60,60))
-            for (x, y, w, h) in faces:
-                top, right = y, x + w
-                bottom, left = y + h, x
-                encs = face_recognition.face_encodings(
-                    rgb, [(top, right, bottom, left)]
-                )
-                if not encs:
-                    continue
-                dist       = np.min(face_recognition.face_distance(known_encs, encs[0]))
-                recognized = (dist < THRESHOLD)
-                tr = dlib.correlation_tracker()
-                tr.start_track(frame, dlib.rectangle(left, top, right, bottom))
-                trackers.append([tr, recognized])
+        if not known_encs:
+            print(f"[ERROR] No encodings found for {passport}")
+            continue
 
-        # draw & check for any match
-        display     = frame.copy()
-        any_matched = False
-        for tr, recognized in trackers:
-            tr.update(frame)
-            pos = tr.get_position()
-            l, t = int(pos.left()), int(pos.top())
-            r, b = int(pos.right()), int(pos.bottom())
+        print(f"[INFO] Loaded encodings for {passport}")
 
-            if recognized:
-                label, color = f"MATCH {passport}", (0,255,0)
-                any_matched  = True
-            else:
-                label, color = "Unknown", (0,0,255)
+        frame_count = 0
+        open_gate = False
 
-            cv2.rectangle(display, (l, t), (r, b), color, 2)
-            cv2.putText(display, label, (l+5, t-5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+        start_time = time.time()
+        while (time.time() - start_time) < 30:
+            ret, frame = cap.read()
+            if not ret:
+                continue
 
-        # SERVO CONTROL
-        now = time.time()
-        if any_matched and not servo_open:
-            servo.ChangeDutyCycle(OPEN_DC)
-            servo_open = True
-            open_time = now
-            print("[INFO] Gate opened")
-        elif servo_open and (now - open_time) >= OPEN_DURATION:
+            frame_count += 1
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            if frame_count % DETECT_EVERY == 1:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = cascade.detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
+
+                for (x, y, w, h) in faces:
+                    top, right = y, x + w
+                    bottom, left = y + h, x
+                    encs = face_recognition.face_encodings(rgb, [(top, right, bottom, left)])
+                    if not encs:
+                        continue
+
+                    dist = np.min(face_recognition.face_distance(known_encs, encs[0]))
+                    recognized = dist < THRESHOLD
+
+                    label, color = (f"MATCH {passport}", (0,255,0)) if recognized else ("UNKNOWN", (0,0,255))
+                    cv2.rectangle(frame, (left, top), (right, bottom), color, 2)
+                    cv2.putText(frame, label, (left + 5, top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+
+                    if recognized:
+                        matched_time = time.time()
+                        while time.time() - matched_time < DISPLAY_DURATION:
+                            ret, disp_frame = cap.read()
+                            if ret:
+                                cv2.rectangle(disp_frame, (left, top), (right, bottom), color, 2)
+                                cv2.putText(disp_frame, label, (left + 5, top - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
+                                cv2.imshow("Face Recognition", disp_frame)
+                                cv2.waitKey(1)
+
+                        current_status = check_last_status(passport)
+                        action = "exited" if current_status else "entered"
+
+                        servo.ChangeDutyCycle(OPEN_DC)
+                        print(f"[INFO] {passport} recognized. Gate opened ({action}).")
+                        with open(LOG_FILE, "a") as log:
+                            log.write(f"{datetime.now()}: {passport} {action}\n")
+                        open_gate = True
+                        break
+
+                if open_gate:
+                    break
+
+            cv2.imshow("Face Recognition", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                sys.exit(0)
+
+        if open_gate:
+            time.sleep(OPEN_DURATION)
             servo.ChangeDutyCycle(CLOSED_DC)
-            servo_open = False
-            print("[INFO] Gate closed")
+            print(f"[INFO] Gate closed for {passport}.")
+        else:
+            print(f"[INFO] No recognition for {passport} within timeout.")
 
-        cv2.imshow("Face Recognition", display)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
+except KeyboardInterrupt:
+    print("[INFO] Program terminated.")
 finally:
     servo.ChangeDutyCycle(CLOSED_DC)
     time.sleep(0.5)
